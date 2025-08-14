@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Evidence Log</title>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 text-gray-900">
+  <div id="root" class="max-w-4xl mx-auto p-4"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    function App() {
+      const [investigations, setInvestigations] = useState([]);
+      const [newInvestigation, setNewInvestigation] = useState("");
+
+      // Load from localStorage
+      useEffect(() => {
+        const saved = localStorage.getItem("evidenceLog");
+        if (saved) setInvestigations(JSON.parse(saved));
+      }, []);
+
+      // Save to localStorage
+      useEffect(() => {
+        localStorage.setItem("evidenceLog", JSON.stringify(investigations));
+      }, [investigations]);
+
+      const addInvestigation = () => {
+        if (!newInvestigation.trim()) return;
+        setInvestigations([...investigations, { 
+          id: Date.now(), 
+          title: newInvestigation, 
+          evidence: [] 
+        }]);
+        setNewInvestigation("");
+      };
+
+      const addEvidence = (invId, evidenceName) => {
+        if (!evidenceName.trim()) return;
+        setInvestigations(investigations.map(inv => 
+          inv.id === invId 
+            ? { ...inv, evidence: [...inv.evidence, { id: Date.now(), name: evidenceName, notes: [] }] }
+            : inv
+        ));
+      };
+
+      const addNote = (invId, evId, note) => {
+        if (!note.trim()) return;
+        setInvestigations(investigations.map(inv => 
+          inv.id === invId 
+            ? { 
+                ...inv, 
+                evidence: inv.evidence.map(ev =>
+                  ev.id === evId ? { ...ev, notes: [...ev.notes, note] } : ev
+                )
+              }
+            : inv
+        ));
+      };
+
+      const exportData = () => {
+        const blob = new Blob([JSON.stringify(investigations, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "evidence-log.json";
+        a.click();
+        URL.revokeObjectURL(url);
+      };
+
+      const importData = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+          try {
+            const data = JSON.parse(reader.result);
+            setInvestigations(data);
+          } catch {
+            alert("Invalid JSON");
+          }
+        };
+        reader.readAsText(file);
+      };
+
+      return (
+        <div>
+          <h1 className="text-2xl font-bold mb-4">Evidence Log</h1>
+
+          <div className="flex gap-2 mb-4">
+            <input 
+              value={newInvestigation} 
+              onChange={e => setNewInvestigation(e.target.value)} 
+              placeholder="New investigation title" 
+              className="border p-2 flex-grow"
+            />
+            <button onClick={addInvestigation} className="bg-blue-500 text-white px-4 py-2 rounded">Add</button>
+          </div>
+
+          <div className="flex gap-4 mb-4">
+            <button onClick={exportData} className="bg-green-500 text-white px-4 py-2 rounded">Export JSON</button>
+            <label className="bg-yellow-500 text-white px-4 py-2 rounded cursor-pointer">
+              Import JSON
+              <input type="file" accept=".json" className="hidden" onChange={importData}/>
+            </label>
+          </div>
+
+          {investigations.map(inv => (
+            <div key={inv.id} className="bg-white p-4 rounded shadow mb-4">
+              <h2 className="text-xl font-semibold">{inv.title}</h2>
+              
+              <EvidenceList inv={inv} addEvidence={addEvidence} addNote={addNote}/>
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    function EvidenceList({ inv, addEvidence, addNote }) {
+      const [newEvidence, setNewEvidence] = useState("");
+      return (
+        <div className="mt-2">
+          <div className="flex gap-2 mb-2">
+            <input 
+              value={newEvidence} 
+              onChange={e => setNewEvidence(e.target.value)} 
+              placeholder="New evidence name" 
+              className="border p-2 flex-grow"
+            />
+            <button onClick={() => { addEvidence(inv.id, newEvidence); setNewEvidence(""); }} className="bg-blue-400 text-white px-4 py-2 rounded">Add</button>
+          </div>
+          {inv.evidence.map(ev => (
+            <EvidenceItem key={ev.id} ev={ev} invId={inv.id} addNote={addNote}/>
+          ))}
+        </div>
+      );
+    }
+
+    function EvidenceItem({ ev, invId, addNote }) {
+      const [newNote, setNewNote] = useState("");
+      return (
+        <div className="border-l-4 border-blue-300 pl-2 mb-2">
+          <h3 className="font-semibold">{ev.name}</h3>
+          <ul className="list-disc list-inside mb-2">
+            {ev.notes.map((n, i) => <li key={i}>{n}</li>)}
+          </ul>
+          <div className="flex gap-2">
+            <input 
+              value={newNote} 
+              onChange={e => setNewNote(e.target.value)} 
+              placeholder="New note" 
+              className="border p-2 flex-grow"
+            />
+            <button onClick={() => { addNote(invId, ev.id, newNote); setNewNote(""); }} className="bg-blue-300 text-white px-4 py-2 rounded">Add</button>
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>
