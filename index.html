@@ -4,10 +4,13 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Evidence Log</title>
+  <!-- Tailwind via CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- React + ReactDOM UMD builds -->
   <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <!-- Babel for in-browser JSX compilation -->
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-gray-100 text-gray-900">
   <div id="root" class="max-w-4xl mx-auto p-4"></div>
@@ -16,53 +19,55 @@
     const { useState, useEffect } = React;
 
     function App() {
+      // State for all investigations
       const [investigations, setInvestigations] = useState([]);
+      // Input states for creating a new investigation
       const [newInvestigation, setNewInvestigation] = useState("");
+      const [invTags, setInvTags] = useState("");
 
-      // Load from localStorage
+      // Load saved investigations from localStorage on mount
       useEffect(() => {
         const saved = localStorage.getItem("evidenceLog");
         if (saved) setInvestigations(JSON.parse(saved));
       }, []);
 
-      // Save to localStorage
+      // Save to localStorage whenever investigations change
       useEffect(() => {
         localStorage.setItem("evidenceLog", JSON.stringify(investigations));
       }, [investigations]);
 
+      // Add new investigation
       const addInvestigation = () => {
         if (!newInvestigation.trim()) return;
-        setInvestigations([...investigations, { 
-          id: Date.now(), 
-          title: newInvestigation, 
-          evidence: [] 
+        setInvestigations([...investigations, {
+          id: Date.now(),
+          title: newInvestigation,
+          tags: invTags.split(",").map(t => t.trim()).filter(Boolean),
+          evidence: []
         }]);
         setNewInvestigation("");
+        setInvTags("");
       };
 
-      const addEvidence = (invId, evidenceName) => {
-        if (!evidenceName.trim()) return;
-        setInvestigations(investigations.map(inv => 
-          inv.id === invId 
-            ? { ...inv, evidence: [...inv.evidence, { id: Date.now(), name: evidenceName, notes: [] }] }
-            : inv
-        ));
-      };
-
-      const addNote = (invId, evId, note) => {
-        if (!note.trim()) return;
+      // Add evidence to investigation
+      const addEvidence = (invId, description, tags, link, file) => {
         setInvestigations(investigations.map(inv => 
           inv.id === invId 
             ? { 
                 ...inv, 
-                evidence: inv.evidence.map(ev =>
-                  ev.id === evId ? { ...ev, notes: [...ev.notes, note] } : ev
-                )
+                evidence: [...inv.evidence, {
+                  id: Date.now(),
+                  description,
+                  tags: tags.split(",").map(t => t.trim()).filter(Boolean),
+                  link,
+                  file
+                }] 
               }
             : inv
         ));
       };
 
+      // Export JSON
       const exportData = () => {
         const blob = new Blob([JSON.stringify(investigations, null, 2)], { type: "application/json" });
         const url = URL.createObjectURL(blob);
@@ -70,19 +75,18 @@
         a.href = url;
         a.download = "evidence-log.json";
         a.click();
-        URL.revokeObjectURL(url);
       };
 
+      // Import JSON
       const importData = (e) => {
         const file = e.target.files[0];
         if (!file) return;
         const reader = new FileReader();
-        reader.onload = () => {
+        reader.onload = (event) => {
           try {
-            const data = JSON.parse(reader.result);
-            setInvestigations(data);
+            setInvestigations(JSON.parse(event.target.result));
           } catch {
-            alert("Invalid JSON");
+            alert("Invalid JSON file.");
           }
         };
         reader.readAsText(file);
@@ -91,78 +95,118 @@
       return (
         <div>
           <h1 className="text-2xl font-bold mb-4">Evidence Log</h1>
-
-          <div className="flex gap-2 mb-4">
-            <input 
-              value={newInvestigation} 
-              onChange={e => setNewInvestigation(e.target.value)} 
-              placeholder="New investigation title" 
-              className="border p-2 flex-grow"
+          
+          {/* Create Investigation */}
+          <div className="mb-4 p-4 bg-white shadow rounded">
+            <input
+              className="border p-2 mr-2"
+              placeholder="Investigation title"
+              value={newInvestigation}
+              onChange={e => setNewInvestigation(e.target.value)}
             />
-            <button onClick={addInvestigation} className="bg-blue-500 text-white px-4 py-2 rounded">Add</button>
+            <input
+              className="border p-2 mr-2"
+              placeholder="Tags (comma separated)"
+              value={invTags}
+              onChange={e => setInvTags(e.target.value)}
+            />
+            <button onClick={addInvestigation} className="bg-blue-500 text-white px-4 py-2 rounded">
+              Add Investigation
+            </button>
           </div>
 
-          <div className="flex gap-4 mb-4">
-            <button onClick={exportData} className="bg-green-500 text-white px-4 py-2 rounded">Export JSON</button>
-            <label className="bg-yellow-500 text-white px-4 py-2 rounded cursor-pointer">
-              Import JSON
-              <input type="file" accept=".json" className="hidden" onChange={importData}/>
-            </label>
+          {/* Export / Import */}
+          <div className="mb-4">
+            <button onClick={exportData} className="bg-green-500 text-white px-4 py-2 rounded mr-2">Export JSON</button>
+            <input type="file" accept=".json" onChange={importData} className="border p-2" />
           </div>
 
+          {/* Investigations List */}
           {investigations.map(inv => (
-            <div key={inv.id} className="bg-white p-4 rounded shadow mb-4">
+            <div key={inv.id} className="mb-4 p-4 bg-white shadow rounded">
               <h2 className="text-xl font-semibold">{inv.title}</h2>
-              
-              <EvidenceList inv={inv} addEvidence={addEvidence} addNote={addNote}/>
+              {inv.tags.length > 0 && (
+                <div className="mb-2">
+                  {inv.tags.map(tag => (
+                    <span key={tag} className="inline-block bg-gray-200 text-sm px-2 py-1 mr-1 rounded">{tag}</span>
+                  ))}
+                </div>
+              )}
+
+              {/* Evidence List */}
+              {inv.evidence.map(ev => (
+                <div key={ev.id} className="ml-4 mt-2 p-2 border-l">
+                  <p>{ev.description}</p>
+                  {ev.tags.length > 0 && (
+                    <div className="mb-1">
+                      {ev.tags.map(tag => (
+                        <span key={tag} className="inline-block bg-gray-100 text-xs px-2 py-1 mr-1 rounded">{tag}</span>
+                      ))}
+                    </div>
+                  )}
+                  {ev.link && <p><a href={ev.link} target="_blank" className="text-blue-500 underline">Link</a></p>}
+                  {ev.file && <p><a href={ev.file} download className="text-blue-500 underline">Download File</a></p>}
+                </div>
+              ))}
+
+              {/* Add Evidence */}
+              <AddEvidenceForm onAdd={(...args) => addEvidence(inv.id, ...args)} />
             </div>
           ))}
         </div>
       );
     }
 
-    function EvidenceList({ inv, addEvidence, addNote }) {
-      const [newEvidence, setNewEvidence] = useState("");
+    function AddEvidenceForm({ onAdd }) {
+      const [desc, setDesc] = useState("");
+      const [tags, setTags] = useState("");
+      const [link, setLink] = useState("");
+      const [fileUrl, setFileUrl] = useState("");
+
+      // Convert uploaded file to object URL
+      const handleFile = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+          setFileUrl(URL.createObjectURL(file));
+        }
+      };
+
+      const submit = () => {
+        if (!desc.trim()) return;
+        onAdd(desc, tags, link, fileUrl);
+        setDesc("");
+        setTags("");
+        setLink("");
+        setFileUrl("");
+      };
+
       return (
         <div className="mt-2">
-          <div className="flex gap-2 mb-2">
-            <input 
-              value={newEvidence} 
-              onChange={e => setNewEvidence(e.target.value)} 
-              placeholder="New evidence name" 
-              className="border p-2 flex-grow"
-            />
-            <button onClick={() => { addEvidence(inv.id, newEvidence); setNewEvidence(""); }} className="bg-blue-400 text-white px-4 py-2 rounded">Add</button>
-          </div>
-          {inv.evidence.map(ev => (
-            <EvidenceItem key={ev.id} ev={ev} invId={inv.id} addNote={addNote}/>
-          ))}
+          <input
+            className="border p-1 mr-1 mb-1"
+            placeholder="Evidence description"
+            value={desc}
+            onChange={e => setDesc(e.target.value)}
+          />
+          <input
+            className="border p-1 mr-1 mb-1"
+            placeholder="Tags"
+            value={tags}
+            onChange={e => setTags(e.target.value)}
+          />
+          <input
+            className="border p-1 mr-1 mb-1"
+            placeholder="Link"
+            value={link}
+            onChange={e => setLink(e.target.value)}
+          />
+          <input type="file" onChange={handleFile} className="mb-1"/>
+          <button onClick={submit} className="bg-purple-500 text-white px-3 py-1 rounded">Add Evidence</button>
         </div>
       );
     }
 
-    function EvidenceItem({ ev, invId, addNote }) {
-      const [newNote, setNewNote] = useState("");
-      return (
-        <div className="border-l-4 border-blue-300 pl-2 mb-2">
-          <h3 className="font-semibold">{ev.name}</h3>
-          <ul className="list-disc list-inside mb-2">
-            {ev.notes.map((n, i) => <li key={i}>{n}</li>)}
-          </ul>
-          <div className="flex gap-2">
-            <input 
-              value={newNote} 
-              onChange={e => setNewNote(e.target.value)} 
-              placeholder="New note" 
-              className="border p-2 flex-grow"
-            />
-            <button onClick={() => { addNote(invId, ev.id, newNote); setNewNote(""); }} className="bg-blue-300 text-white px-4 py-2 rounded">Add</button>
-          </div>
-        </div>
-      );
-    }
-
-    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
   </script>
 </body>
 </html>
